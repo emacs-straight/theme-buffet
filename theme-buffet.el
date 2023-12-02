@@ -92,9 +92,9 @@
 ;;    (theme-buffet-timer-mins 30) ; to change theme every 30m from now
 ;;    (theme-buffet-timer-hours 2) ; to also change every 2h from now
 ;;
-;; Interactively, as an example, you would press M-x and execute
-;; `theme-buffet-order-other-period'.  Then, after choosing any defined period,
-;;you would get returned a random loaded theme from the aforementioned period.
+;; Interactively, as an example, you would press M-x
+;; `theme-buffet-order-other-period'. Then, after choosing any defined period,
+;; you would get returned a random loaded theme from the aforementioned period.
 
 ;;
 ;; Disclaimer from Bruno Boal to the reader: This package was produced during my
@@ -297,7 +297,7 @@ information."
     (or (remq (car custom-enabled-themes) theme-list)
         theme-list)))
 
-(defun theme-buffet--load-random (period)
+(defun theme-buffet--load-random (&optional period)
   "Load random theme according to PERIOD.
 
 Omit current theme if it's not the only pertaining to the list of the
@@ -305,12 +305,13 @@ corresponding period.  Being this the case, the same theme shall be served.
 
 An error message will appear if the theme is not available to load through
 `load-theme'."
-  (if-let ((themes (theme-buffet--get-theme-list period))
-           (chosen-theme (seq-random-elt themes))
-           ((memq chosen-theme (custom-available-themes))))
-      (theme-buffet--reload-theme chosen-theme)
-    (user-error "Theme-Buffet Chef says `%s' is not known or installed!"
-                chosen-theme)))
+  (let ((period (or period (theme-buffet--get-period-keyword))))
+    (if-let ((themes (theme-buffet--get-theme-list period))
+             (chosen-theme (seq-random-elt themes))
+             ((memq chosen-theme (custom-available-themes))))
+        (theme-buffet--reload-theme chosen-theme)
+      (user-error "Theme-Buffet Chef says `%s' is not known or installed!"
+                  chosen-theme))))
 
 (defvar theme-buffet-theme-history nil
   "Theme-Buffet period history.")
@@ -372,13 +373,25 @@ An error message will appear if the theme is not available to load through
 (defvar theme-buffet-timer-mins nil
   "Timer that calls another Theme-Buffet's Sous-Chef into the kitchen.")
 
-(defun theme-buffet--free-timer (timer-obj)
-  "Cancel and set to nil the timer TIMER-OBJ."
+(defun theme-buffet--free-timer (timer-obj &optional no-message)
+  "Cancel and set to nil the timer TIMER-OBJ.
+With optional NO-MESSAGE, does not notify the user."
   (when-let (((boundp timer-obj))
              (obj (symbol-value timer-obj)))
     (cancel-timer obj)
     (set timer-obj nil)
-    (message "Break time in the Theme-Buffet kitchen!")))
+    (unless no-message
+      (message "Break time in the Theme-Buffet kitchen!"))))
+
+
+(defun theme-buffet-free-all-timers ()
+  "Give a break to Theme-Buffet staff.
+All timer variables and functions are canceled."
+  (interactive)
+  (cancel-function-timers #'theme-buffet--load-random)
+  (mapc (lambda (timer)
+          (theme-buffet--free-timer timer :no-message))
+        '(theme-buffet-timer-mins theme-buffet-timer-hours theme-buffet-timer-periods)))
 
 
 (defmacro theme-buffet--define-timer (units)
@@ -396,17 +409,24 @@ naming."
        ,(format "Set interactively the timer for NUMBER of %s.
 When NUMBER is 0, the timer is cancelled. Maximum value is %s" units max-num)
        (interactive
-        (list (read-number ,(format "Theme Buffet service in how many %s? " units) nil
-                           'theme-buffet-user-timers-history)))
+        (list (read-number
+               ,(format "Theme Buffet service in how many %s? (0 to cancel) " units) nil
+               'theme-buffet-user-timers-history)))
+       (or theme-buffet-mode (theme-buffet-mode 1))
        (if-let (((natnump number))
                 ((<= number ,max-num))
-                (timer-secs (* ,factor number)))
-           (if (equal number 0)
+                (timer-secs (* ,factor number))
+                (msg-1 "Theme-Buffet Sous-Chef is ")
+                (msg-2 "rushing into the kitchen..."))
+           (if (= number 0)
                (theme-buffet--free-timer ',fn-name)
+             (setq msg-2 (if ,fn-name
+                             "waiting for the requisition"
+                           msg-2))
+             (theme-buffet--free-timer ',fn-name :no-message)
              (setq ,fn-name (run-at-time timer-secs timer-secs
-                                         #'theme-buffet--load-random
-                                         (theme-buffet--get-period-keyword)))
-             (message "Theme-Buffet Sous-Chef is rushing into the kitchen..."))
+                                         #'theme-buffet--load-random))
+             (message (concat msg-1 msg-2)))
          (user-error "The input number should be a natural up to %s instead of `%s'"
                      ,max-num number)))))
 
@@ -433,12 +453,12 @@ opinion.")
     `(defun ,(intern (format "theme-buffet-%s" menu)) ()
        ,docstring
        (interactive)
+       (or theme-buffet-mode (theme-buffet-mode 1))
        (theme-buffet--free-timer 'theme-buffet-timer-periods)
        (setq theme-buffet-menu (quote ,menu)
              theme-buffet-timer-periods
              (run-at-time t (theme-buffet--interval)
-                          #'theme-buffet--load-random
-                          (theme-buffet--get-period-keyword)))
+                          #'theme-buffet--load-random))
        (message "Sucess! Theme-Buffet Chef is firing up %s themes..." ',menu))))
 
 ;;;###autoload (autoload 'theme-buffet-built-in "theme-buffet")
@@ -459,7 +479,7 @@ The preference for the themes is specified in the `theme-buffet-menu'"
   (if theme-buffet-mode
       (unless (plistp (theme-buffet--selected-menu))
            (user-error "`theme-buffet-menu' isn't passing the health inspections as it is!"))
-    (cancel-function-timers #'theme-buffet--load-random)))
+    (theme-buffet-free-all-timers)))
 
 
 (provide 'theme-buffet)
