@@ -6,7 +6,7 @@
 ;;         Protesilaos Stavrou <info@protesilaos.com>
 ;; Maintainer: Theme-Buffet Development <~bboal/general-issues@lists.sr.ht>
 ;; URL: https://git.sr.ht/~bboal/theme-buffet
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Package-Requires: ((emacs "29.1"))
 
 ;; This file is part of GNU Emacs.
@@ -61,7 +61,7 @@
 ;; Following the appanage way of Emacs, both the names and number of themes and
 ;; time periods can be freely changed while mantaining the same structure.
 ;; There is also a time-offset that can be set by the user to match a specific
-;; time-zone/personal preference. E.g
+;; time-zone/personal preference.  E.g
 ;;
 ;;    (setq theme-buffet-time-offset 2)
 ;;
@@ -94,7 +94,7 @@
 ;;    (theme-buffet-timer-hours 2) ; to also change every 2h from now
 ;;
 ;; Interactively, as an example, you would press M-x
-;; `theme-buffet-order-other-period'. Then, after choosing any defined period,
+;; `theme-buffet-order-other-period'.  Then, after choosing any defined period,
 ;; you would get returned a random loaded theme from the aforementioned period.
 
 ;;
@@ -396,6 +396,51 @@ All timer variables and functions are canceled."
           theme-buffet-timer-hours
           theme-buffet-timer-periods)))
 
+(defun theme-buffet--active-timers ()
+  "Get list of strings with the suffix of the active timers.
+E.g If both the periods and mins timers are active, the returned list is as
+  follows: (\"periods\" \"mins\")"
+  (let* ((var-len (length "theme-buffet-timer-"))
+         (active-timers
+          (mapcar (lambda (timer)
+                    (if (symbol-value timer)
+                        (substring (symbol-name timer) var-len)))
+                  '(theme-buffet-timer-periods
+                    theme-buffet-timer-mins
+                    theme-buffet-timer-hours))))
+    (delq nil active-timers)))
+
+(defun theme-buffet-clear-timers ()
+  "Check active timers and prompt the user to choose which to clear."
+  (declare (interactive-only t))
+  (interactive)
+  (if-let ((prompt "Choose a timer to clear/cancel: ")
+           (collection (theme-buffet--active-timers))
+           (choice (completing-read prompt collection nil t)))
+      (cond
+       ((string-equal choice "periods")
+        (theme-buffet--free-timer 'theme-buffet-timer-periods))
+       ((string-equal choice "mins")
+        (theme-buffet--free-timer 'theme-buffet-timer-mins))
+       ((string-equal choice "hours")
+        (theme-buffet--free-timer 'theme-buffet-timer-hours))
+       (t
+        (user-error "Invalid choice in `theme-buffet-clear-timers'")))
+    (user-error "You didn't send a single Chef into the kitchen")))
+
+
+;;;###autoload
+(define-minor-mode theme-buffet-mode
+  "Theme-Buffet serves your preferred themes according to the time of day.
+You eyes will thank you.  Or not...
+
+The preference for the themes is specified in the `theme-buffet-menu'"
+  :global t
+  (if theme-buffet-mode
+      (unless (plistp (theme-buffet--selected-menu))
+           (user-error "`theme-buffet-menu' isn't passing the health inspections as it is!"))
+    (theme-buffet-free-all-timers)))
+
 
 (defmacro theme-buffet--define-timer (units)
   "Define interactive functions to set timer in UNITS.
@@ -407,7 +452,7 @@ naming."
       ('mins (setq factor 60 max-num 180))
       ('hours (setq factor 3600 max-num 12))
       (_ (user-error
-          "Bad `units' arg on `theme-buffet--define-timer %s'" units)))
+          "Wrong arg on `theme-buffet--define-timer': %s" units)))
     `(defun ,fn-name (number)
        ,(format "Set interactively the timer for NUMBER of %s.
 When NUMBER is 0, the timer is cancelled. Maximum value is %s" units max-num)
@@ -420,7 +465,7 @@ When NUMBER is 0, the timer is cancelled. Maximum value is %s" units max-num)
        (if-let (((natnump number))
                 ((<= number ,max-num))
                 (timer-secs (* ,factor number))
-                (msg-1 "Theme-Buffet Sous-Chef is ")
+                (msg-1 "Theme-Buffet Sous-Chef is")
                 (msg-2 "rushing into the kitchen..."))
            (if (= number 0)
                (theme-buffet--free-timer ',fn-name)
@@ -430,7 +475,7 @@ When NUMBER is 0, the timer is cancelled. Maximum value is %s" units max-num)
              (theme-buffet--free-timer ',fn-name :no-message)
              (setq ,fn-name (run-at-time timer-secs timer-secs
                                          #'theme-buffet--load-random))
-             (message (concat msg-1 msg-2)))
+             (message "%s %s" msg-1 msg-2))
          (user-error "The input number should be a natural up to %s instead of `%s'"
                      ,max-num number)))))
 
@@ -472,18 +517,6 @@ opinion.")
 ;;;###autoload (autoload 'theme-buffet-end-user "theme-buffet")
 (theme-buffet--define-menu-defuns end-user)  ; (theme-buffet-end-user)
 
-
-;;;###autoload
-(define-minor-mode theme-buffet-mode
-  "Theme-Buffet serves your preferred themes according to the time of day.
-You eyes will thank you.  Or not...
-
-The preference for the themes is specified in the `theme-buffet-menu'"
-  :global t
-  (if theme-buffet-mode
-      (unless (plistp (theme-buffet--selected-menu))
-           (user-error "`theme-buffet-menu' isn't passing the health inspections as it is!"))
-    (theme-buffet-free-all-timers)))
 
 
 (provide 'theme-buffet)
