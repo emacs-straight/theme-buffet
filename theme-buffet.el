@@ -178,7 +178,10 @@ Return a new list with the symbol const prepended to each element for usage in
   "Different periods of the day combined with Ef or Modus themes.
 For those who just don't have the time and want the best.")
 
-(defcustom theme-buffet--end-user
+(define-obsolete-variable-alias 'theme-buffet--end-user
+                                'theme-buffet-end-user "0.2.0dev")
+
+(defcustom theme-buffet-end-user
   '(:night     (wheatgrass manoj-dark modus-vivendi)
     :morning   (adwaita whiteboard leuven modus-operandi tango dichromacy tsdh-light)
     :afternoon (leuven-dark tango-dark tsdh-dark misterioso)
@@ -209,7 +212,7 @@ Prefilled with Emacs default themes as an example to be changed by the user."
   (pcase theme-buffet-menu
     ('built-in theme-buffet--built-in)
     ('modus-ef theme-buffet--modus-ef)
-    ('end-user theme-buffet--end-user)))
+    ('end-user theme-buffet-end-user)))
 
 (defun theme-buffet--hours-secs (hours)
   "Number of seconds in HOURS."
@@ -327,12 +330,14 @@ An error message will appear if the theme is not available to load through
 
 ;;;###autoload
 (defun theme-buffet-a-la-carte ()
-  "Prompt user for a theme according to the current period of the day."
-  (declare (interactive-only t))
+  "Prompt user for a theme according to the current period of the day.
+When called from Lisp code, load a random theme from the current day period."
   (interactive)
-  (let ((chosen-theme (intern (theme-buffet--theme-prompt))))
-    (theme-buffet--reload-theme chosen-theme
-                                "according to your wishes. Enjoy..." )))
+  (if-let (((called-interactively-p 'interactive))
+           (chosen-theme (intern (theme-buffet--theme-prompt))))
+      (theme-buffet--reload-theme chosen-theme
+                                  "according to your wishes. Enjoy..." )
+    (theme-buffet--load-random)))
 
 (defvar theme-buffet-period-history nil
   "Theme-Buffet period history.")
@@ -345,12 +350,18 @@ An error message will appear if the theme is not available to load through
     (completing-read prompt collection nil t nil history-var)))
 
 ;;;###autoload
-(defun theme-buffet-order-other-period ()
-  "Interactively load a random theme from a prompted period."
-  (declare (interactive-only t))
+(defun theme-buffet-order-other-period (&optional period)
+  "Interactively load a random theme from a prompted period.
+When called from Lisp code, load a random theme from PERIOD."
   (interactive)
-  (let ((period (intern (theme-buffet--period-prompt))))
-    (theme-buffet--load-random period)))
+  (cond
+   ((called-interactively-p 'interactive)
+    (theme-buffet--load-random (intern (theme-buffet--period-prompt))))
+   ((memq period (theme-buffet--keywords))
+    (theme-buffet--load-random period))
+   (t
+    (user-error
+     "Theme-Buffet doesn't know '%s' and is unable to serve you" period))))
 
 ;;;###autoload
 (defun theme-buffet-anything-goes ()
